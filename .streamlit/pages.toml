@@ -1,0 +1,24 @@
+[[pages]]
+path = "pages/start_front.py"
+name = "홈"
+icon = "🏠"
+
+[[pages]]
+path = "pages/tester.py"
+name = "API 테스트"
+icon = "🧪"
+
+[[pages]]
+path = "pages/prompt_history.py"
+name = "프롬프트 이력"
+icon = "📝"
+
+[[pages]]
+path = "pages/view_data_history.py"
+name = "실험실"
+icon = "🔬"
+
+[[pages]]
+path = "pages/setting.py"
+name = "환경설정"
+icon = "⚙️"
