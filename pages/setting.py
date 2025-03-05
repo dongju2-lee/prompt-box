@@ -50,6 +50,7 @@ class SettingPage:
             use_container_width=True
         ):
             st.session_state.show_endpoints = not st.session_state.show_endpoints
+            st.rerun()  # 상태 변경 후 즉시 페이지 리로드
         
         # 엔드포인트 목록 표시
         if st.session_state.show_endpoints:

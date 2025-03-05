@@ -5,7 +5,7 @@ import time
 import hashlib
 import uuid
 from datetime import datetime
-from utils.storage import load_prompts, save_prompts, save_history_entry
+from utils.storage import load_prompts, save_prompts, save_history_entry, load_endpoints
 
 class TesterPage:
     def __init__(self):
@@ -24,17 +24,33 @@ class TesterPage:
     
     def render_api_settings(self):
         """API 설정 섹션 렌더링"""
-        st.write("**현재 API 서버 주소:**")
-        st.code(st.session_state.api_url)
+        st.write("**API 서버 선택**")
+        
+        # 저장된 엔드포인트 불러오기
+        endpoints = load_endpoints()
+        
+        if not endpoints:
+            st.error("등록된 API 엔드포인트가 없습니다. 환경설정에서 엔드포인트를 먼저 등록해주세요.")
+            if st.button("환경설정으로 이동", type="primary"):
+                st.switch_page("pages/setting.py")
+            return None, None
+        
+        # 엔드포인트 선택 드롭다운
+        selected_endpoint = st.selectbox(
+            "API 엔드포인트 선택",
+            options=endpoints,
+            format_func=lambda x: x,  # 전체 URL 표시
+            label_visibility="collapsed"
+        )
         
         col1, col2 = st.columns([3, 1])
         with col1:
-            url_path = st.text_input("URL 경로", value="/single/cam", 
+            url_path = st.text_input("상세 URL 경로", value="/", 
                                    help="API 서버 주소 뒤에 추가될 경로")
         with col2:
             http_method = st.selectbox("HTTP 메소드", options=["GET", "POST"])
         
-        full_url = f"{st.session_state.api_url.rstrip('/')}{url_path}"
+        full_url = f"{selected_endpoint.rstrip('/')}{url_path}"
         st.write("**요청 URL:**", full_url)
         return full_url, http_method
     
