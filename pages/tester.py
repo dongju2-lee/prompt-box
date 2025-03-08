@@ -6,9 +6,11 @@ import hashlib
 import uuid
 from datetime import datetime
 from utils.storage import load_prompts, save_prompts, save_history_entry, load_endpoints
+from utils.api_handler import APIHandler  # 상단에 import 추가
 
 class TesterPage:
     def __init__(self):
+        self.api_handler = APIHandler()
         self.initialize_session_state()
         
     def initialize_session_state(self):
@@ -17,6 +19,8 @@ class TesterPage:
             st.session_state.prompt_save_status = "save"
         if "api_request_status" not in st.session_state:
             st.session_state.api_request_status = {"text": "send", "color": "primary", "result": None}
+        if "response" not in st.session_state:
+            st.session_state.response = None
     
     def get_prompt_hash(self, prompt_text):
         """프롬프트 텍스트의 해시값을 계산하여 중복 확인에 사용"""
@@ -51,29 +55,47 @@ class TesterPage:
             http_method = st.selectbox("HTTP 메소드", options=["GET", "POST"])
         
         full_url = f"{selected_endpoint.rstrip('/')}{url_path}"
-        st.write("**요청 URL:**", full_url)
+        # 요청 URL을 한 줄에 표시
+        url_cols = st.columns([1, 4])
+        with url_cols[0]:
+            st.markdown(
+                '<div style="display: flex; align-items: center; justify-content: flex-start; min-height: 3rem;">'
+                '<p style="margin: 0;"><strong>요청 URL:</strong></p>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+        with url_cols[1]:
+            st.markdown(
+                f'<div style="display: flex; align-items: center; min-height: 3rem;">'
+                f'<code style="background-color: rgb(247, 248, 250); padding: 0.2rem 0.4rem; border-radius: 4px; width: 100%;">{full_url}</code>'
+                '</div>',
+                unsafe_allow_html=True
+            )
         return full_url, http_method
     
+
     def render_prompt_section(self):
         """프롬프트 섹션 렌더링"""
         st.subheader("프롬프트")
         saved_prompts = load_prompts()
-        prompt_names = ["직접 입력"] + [p["name"] for p in saved_prompts]
+        prompt_names = ["선택안함", "직접 입력"] + [p["name"] for p in saved_prompts]
         selected_prompt_name = st.selectbox("프롬프트 선택", prompt_names)
         
-        save_col, text_col = st.columns([1, 5])
-        
-        with save_col:
-            button_color = "primary" if st.session_state.prompt_save_status == "save" else "secondary"
-            save_clicked = st.button(st.session_state.prompt_save_status, type=button_color, key="save_prompt_btn")
-        
-        with text_col:
-            prompt = self.handle_prompt_input(selected_prompt_name, saved_prompts)
-        
-        if save_clicked:
-            self.handle_prompt_save(prompt, saved_prompts)
+        prompt = None
+        if selected_prompt_name != "선택안함":
+            save_col, text_col = st.columns([1, 5])
             
-        return prompt
+            with save_col:
+                button_color = "primary" if st.session_state.prompt_save_status == "save" else "secondary"
+                save_clicked = st.button(st.session_state.prompt_save_status, type=button_color, key="save_prompt_btn")
+            
+            with text_col:
+                prompt = self.handle_prompt_input(selected_prompt_name, saved_prompts)
+            
+            if save_clicked:
+                self.handle_prompt_save(prompt, saved_prompts)
+                
+        return prompt, selected_prompt_name != "선택안함"
     
     def handle_prompt_input(self, selected_prompt_name, saved_prompts):
         """프롬프트 입력 처리"""
@@ -128,7 +150,7 @@ class TesterPage:
     def render_data_input(self):
         """데이터 입력 섹션 렌더링"""
         st.subheader("데이터 입력")
-        data_type = st.radio("데이터 유형 선택", ["이미지", "문자열", "JSON"], horizontal=True)
+        data_type = st.radio("데이터 유형 선택", ["선택안함", "이미지", "문자열", "JSON"], horizontal=True)
         
         data = None
         if data_type == "이미지":
@@ -138,7 +160,7 @@ class TesterPage:
                 data = uploaded_file
         elif data_type == "문자열":
             data = st.text_area("문자열 입력", height=100)
-        else:  # JSON
+        elif data_type == "JSON":
             json_text = st.text_area("JSON 입력", value="{}", height=150)
             try:
                 if json_text:
@@ -150,10 +172,6 @@ class TesterPage:
     
     def handle_api_request(self, full_url, http_method, prompt, data_type, data):
         """API 요청 처리"""
-        if not prompt:
-            st.error("프롬프트를 입력해주세요.")
-            return
-        
         try:
             response = self.send_api_request(full_url, http_method, prompt, data_type, data)
             self.handle_api_response(response, prompt, data_type, data)
@@ -164,32 +182,93 @@ class TesterPage:
         """API 요청 전송"""
         if http_method == "POST":
             if data_type == "이미지":
-                files = {'image': data}
-                data = {'prompt': prompt}
+                files = {'image': data} if data else {}
+                data = {'prompt': prompt} if prompt else {}
                 return requests.post(full_url, files=files, data=data)
             else:
-                request_data = {'prompt': prompt}
+                request_data = {}
+                if prompt:
+                    request_data['prompt'] = prompt
                 if data_type == "문자열":
                     request_data['text'] = data
-                else:  # JSON
-                    request_data['data'] = data
+                elif data_type == "JSON":
+                    request_data.update(data or {})
                 return requests.post(full_url, json=request_data)
         else:  # GET
-            params = {'prompt': prompt}
+            params = {}
+            if prompt:
+                params['prompt'] = prompt
             if data_type == "문자열":
                 params['text'] = data
             elif data_type == "JSON":
-                params.update(data)
+                params.update(data or {})
             return requests.get(full_url, params=params)
+    
+    def send_request(self, url: str, method: str, data: dict) -> dict:
+        """API 요청을 보내는 메서드"""
+        response_data, error = self.api_handler.handle_api_request(url, method, data)
+        
+        if error:
+            st.error(error)
+            return None
+        
+        return response_data
+    
+    def render_response(self):
+        """API 응답 결과를 렌더링"""
+        if st.session_state.response:
+            st.subheader("응답 결과")
+            st.json(st.session_state.response)
+    
+    def handle_api_error(self, error, prompt, data_type, data):
+        """API 요청 중 발생한 에러를 처리합니다."""
+        error_msg = str(error)
+        
+        if "MissingSchema" in error_msg:
+            st.error("올바른 URL 형식이 아닙니다. 'http://' 또는 'https://'로 시작하는 URL을 입력해주세요.")
+        elif "ConnectionError" in error_msg:
+            st.error("서버에 연결할 수 없습니다. URL이 올바른지 확인해주세요.")
+        else:
+            st.error(f"API 요청 중 오류가 발생했습니다: {error_msg}")
+        
+        # 디버깅을 위한 상세 정보
+        with st.expander("디버그 정보"):
+            st.write("요청 정보:")
+            st.json({
+                "prompt": prompt,
+                "data_type": data_type,
+                "data": data
+            })
+    
+    def handle_api_response(self, response, prompt, data_type, data):
+        """API 응답 처리"""
+        try:
+            response_json = response.json()
+            st.session_state.response = response_json
+            st.session_state.api_request_status["result"] = "OK"
+            
+            # 응답 결과 표시
+            st.subheader("응답 결과")
+            st.json(response_json)
+            
+        except Exception as e:
+            st.session_state.api_request_status["result"] = "FAIL"
+            st.error(f"응답 처리 중 오류가 발생했습니다: {str(e)}")
+            
+            # 디버그 정보
+            with st.expander("응답 상세 정보"):
+                st.write("Status Code:", response.status_code)
+                st.write("Headers:", dict(response.headers))
+                st.write("Content:", response.text)
     
     def render(self):
         """페이지 전체 렌더링"""
         full_url, http_method = self.render_api_settings()
-        prompt = self.render_prompt_section()
+        prompt, has_prompt = self.render_prompt_section()
         data_type, data = self.render_data_input()
         
         # API 요청 버튼 및 상태 표시
-        status_col, send_col = st.columns([1, 5])
+        status_col, send_col = st.columns([8,1])
         with send_col:
             send_clicked = st.button(
                 st.session_state.api_request_status["text"],
@@ -204,7 +283,9 @@ class TesterPage:
                 st.error("FAIL")
         
         if send_clicked:
-            self.handle_api_request(full_url, http_method, prompt, data_type, data)
+            if data_type == "선택안함":
+                data = None
+            self.handle_api_request(full_url, http_method, prompt if has_prompt else None, data_type, data)
 
 # 전역 인스턴스 생성
 page = TesterPage()

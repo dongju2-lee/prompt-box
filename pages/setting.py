@@ -5,6 +5,25 @@ import time  # 파일 상단에 추가
 class SettingPage:
     def __init__(self):
         self.initialize_session_state()
+        # CSS 스타일 추가
+        st.markdown("""
+            <style>
+            .stTextInput > div > div > input {
+                border: none;
+                min-height: 48px;  /* 입력 필드 높이 설정 */
+            }
+            .stButton > button {
+                align-items: center;
+                min-height: 24px;  /* 버튼 높이 설정 */
+                padding-top: 0px;
+                padding-bottom: 0px;
+                line-height: 36px;  /* 텍스트 수직 중앙 정렬 */
+            }
+            .stButton {
+                margin-top: -1px;  /* 버튼 위치 미세 조정 */
+            }
+            </style>
+            """, unsafe_allow_html=True)
     
     def initialize_session_state(self):
         """세션 상태 초기화"""

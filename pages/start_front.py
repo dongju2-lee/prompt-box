@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+from utils.storage import load_endpoints
 
 class StartFrontPage:
     def __init__(self):
@@ -10,7 +11,6 @@ class StartFrontPage:
         self.show_welcome_message()
         self.show_announcements()
         self.show_system_status()
-        self.show_quick_start()
     
     def show_title(self):
         st.title("🤖 Gemini 프롬프트 관리 시스템")
@@ -51,16 +51,42 @@ class StartFrontPage:
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("시스템 상태")
-            st.write("**API 서버 주소:**")
-            st.code(st.session_state.api_url)
-        
+            st.subheader("등록된 API Endpoint 정보")
+            
+            # 엔드포인트 목록 불러오기
+            endpoints = load_endpoints()
+            
+            # 엔드포인트 수와 목록 보기 버튼을 한 줄에 배치
+            status_col, button_col = st.columns([3, 1])
+            with status_col:
+                st.write(f"**등록된 엔드포인트:** {len(endpoints)}개")
+            
+            with button_col:
+                if "show_endpoint_list" not in st.session_state:
+                    st.session_state.show_endpoint_list = False
+                    
+                if st.button(
+                    "list 닫기" if st.session_state.show_endpoint_list else "list 보기",
+                    use_container_width=True
+                ):
+                    st.session_state.show_endpoint_list = not st.session_state.show_endpoint_list
+                    st.rerun()
+            
+            # 엔드포인트 목록 표시
+            if st.session_state.show_endpoint_list:
+                if endpoints:
+                    for endpoint in endpoints:
+                        st.code(endpoint)
+                else:
+                    st.warning("등록된 API 엔드포인트가 없습니다.")
+                    if st.button("환경설정에서 등록하기", type="primary"):
+                        st.switch_page("pages/setting.py")
+
         with col2:
             st.subheader("데이터 저장 위치")
-            st.code(f"데이터 경로: {os.path.abspath(self.data_path)}")
+            data_path = "./app_data"  # 앱 데이터 디렉토리
+            st.code(f"데이터 경로: {os.path.abspath(data_path)}")
     
-    def show_quick_start(self):
-        st.subheader("빠른 시작")
 
 # 전역 인스턴스 생성
 page = StartFrontPage()
